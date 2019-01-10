@@ -29,7 +29,7 @@ func NewHare(url string, queueName string) *Rabbit{
 }
 
 type Handler struct {
-	handlerFunction func(amqp.Delivery)(interface{}, bool)
+	handlerFunction func(event *Event)
 	rpc bool
 }
 
@@ -66,7 +66,7 @@ func (r *Rabbit)declareQueue(name string) {
 	failOnError(err, "Failed to set QoS")
 }
 
-func (r *Rabbit)Subscribe(routingKey string, handler func(amqp.Delivery)(interface{}, bool), rpc bool){
+func (r *Rabbit)Subscribe(routingKey string, handler func(event *Event), rpc bool){
 	err := r.channel.QueueBind(
 		r.queue.Name,        // queue name
 		routingKey,             // routing key
@@ -96,18 +96,34 @@ func (r *Rabbit)Listen(){
 
 	go func() {
 		for message := range msgs {
-			fmt.Println("Got routing key "+ message.RoutingKey)
-			if r.handlers[message.RoutingKey].rpc{
-				response, isError := r.handlers[message.RoutingKey].handlerFunction(message)
-				err = r.respond(message, response, isError)
-			}else {
-				r.handlers[message.RoutingKey].handlerFunction(message)
+			fmt.Println("Got event "+ message.RoutingKey)
+			event := Event{
+				message:message,
 			}
+			r.handlers[message.RoutingKey].handlerFunction(&event)
+
+			if r.handlers[message.RoutingKey].rpc{
+				err = r.respond(event)
+			}
+
 			message.Ack(false)
 		}
 	}()
 	log.Printf("Consumer is runnning")
 	<-forever
+}
+
+type Event struct{
+	message amqp.Delivery
+	response interface{}
+	isError bool
+}
+
+func(eve *Event)Error(errorMessage string){
+	eve.response = ErrorForm{
+		ErrorMessage:errorMessage,
+	}
+	eve.isError = true
 }
 
 func (r *Rabbit)Send(routingKey string, messageBody interface{})error{
@@ -181,20 +197,20 @@ func randInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
-func (r *Rabbit)respond(message amqp.Delivery, response interface{}, isError bool)error{
-	responseJson, _ := json.Marshal(response)
+func (r *Rabbit)respond(event Event)error{
+	responseJson, _ := json.Marshal(event.response)
 
 	headers := make(map[string]interface{})
-	headers["error"] = isError
+	headers["error"] = event.isError
 	err := r.channel.Publish(
 		"",        // exchange
-		message.ReplyTo, // routing key
+		event.message.ReplyTo, // routing key
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
 			DeliveryMode: amqp.Persistent,
 			ContentType:   "application/json",
-			CorrelationId: message.CorrelationId,
+			CorrelationId: event.message.CorrelationId,
 			Body:          responseJson,
 			Headers: headers,
 		})
