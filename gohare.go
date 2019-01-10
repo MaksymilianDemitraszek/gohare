@@ -16,13 +16,13 @@ type Rabbit struct {
 	exchangeName string
 }
 
-func NewRabbit(exchangeName string, queueName string) *Rabbit{
+func NewHare(url string, queueName string) *Rabbit{
 	rabbit := Rabbit{
-		connection:connectAmpq(),
+		connection:connectAmpq(url),
 	}
 	rabbit.channel = connectChannel(rabbit.connection)
-	rabbit.exchangeName = exchangeName
-	rabbit.declareExchange(exchangeName)
+	rabbit.exchangeName = ""
+	rabbit.declareExchange("")
 	rabbit.declareQueue(queueName)
 	rabbit.handlers = make(map[string]Handler)
 	return &rabbit
@@ -207,10 +207,8 @@ func connectChannel(connection *amqp.Connection) *amqp.Channel{
 	return ch
 }
 
-func connectAmpq() *amqp.Connection{
-	conn, err := amqp.Dial("amqp://test:test@rabbitmq:5673/"); if err!=nil{
-		conn, err = amqp.Dial("amqp://test:test@localhost:5672/")
-	}
+func connectAmpq(url string) *amqp.Connection{
+	conn, err := amqp.Dial(url)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	return conn
 }
