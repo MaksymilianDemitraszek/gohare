@@ -21,8 +21,8 @@ func NewHare(url string, queueName string) *Rabbit{
 		connection:connectAmpq(url),
 	}
 	rabbit.channel = connectChannel(rabbit.connection)
-	rabbit.exchangeName = ""
-	rabbit.declareExchange("")
+	rabbit.exchangeName = "main"
+	rabbit.declareExchange("main")
 	rabbit.declareQueue(queueName)
 	rabbit.handlers = make(map[string]Handler)
 	return &rabbit
