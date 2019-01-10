@@ -1,4 +1,4 @@
-package go_rabbit
+package gohare
 
 import (
 	"encoding/json"
@@ -114,21 +114,33 @@ func (r *Rabbit)Listen(){
 }
 
 type Event struct{
-	message amqp.Delivery
-	response interface{}
+	Message amqp.Delivery
+	response []byte
 	isError bool
 }
 
 func(eve *Event)Error(errorMessage string){
-	eve.response = ErrorForm{
+	errorResponse := ErrorForm{
 		ErrorMessage:errorMessage,
 	}
 	eve.isError = true
+	eve.MakeResponse(errorResponse)
+}
+
+func(eve *Event)MakeResponse(response interface{}){
+	responseJson, err := json.Marshal(&response)
+	if err != nil{
+		panic(err.Error())
+	}
+	eve.response = responseJson
 }
 
 func (r *Rabbit)Send(routingKey string, messageBody interface{})error{
-	responseJson, _ := json.Marshal(messageBody)
-	err := r.channel.Publish(
+	responseJson, err := json.Marshal(messageBody)
+	if err != nil{
+		panic(err.Error())
+	}
+	err = r.channel.Publish(
 		"",        // exchange
 		routingKey, // routing key
 		false,     // mandatory
