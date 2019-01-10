@@ -116,6 +116,7 @@ func (r *Rabbit)Listen(){
 type Event struct{
 	Message amqp.Delivery
 	response []byte
+	isResponseMade bool
 	isError bool
 }
 
@@ -124,15 +125,22 @@ func(eve *Event)Error(errorMessage string){
 		ErrorMessage:errorMessage,
 	}
 	eve.isError = true
-	eve.MakeResponse(errorResponse)
+	eve.MakeResponse(&errorResponse)
 }
 
 func(eve *Event)MakeResponse(response interface{}){
-	responseJson, err := json.Marshal(&response)
-	if err != nil{
-		panic(err.Error())
+	if eve.isResponseMade == false{
+		responseJson, err := json.Marshal(&response)
+		if err != nil{
+			panic(err.Error())
+		}
+		eve.response = responseJson
+		eve.isResponseMade = true
 	}
-	eve.response = responseJson
+}
+
+func(eve *Event)GetResponse(response interface{})[]byte{
+	return eve.response
 }
 
 func (r *Rabbit)Send(routingKey string, messageBody interface{})error{
@@ -154,8 +162,6 @@ func (r *Rabbit)Send(routingKey string, messageBody interface{})error{
 }
 
 func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
-	//responseJson, _ := json.Marshal(messageBody)
-
 	msgs, err := r.channel.Consume(
 		r.queue.Name, // queue
 		"",     // consumer
@@ -210,7 +216,6 @@ func randInt(min int, max int) int {
 }
 
 func (r *Rabbit)respond(event Event)error{
-	responseJson, _ := json.Marshal(event.response)
 
 	headers := make(map[string]interface{})
 	headers["error"] = event.isError
@@ -223,7 +228,7 @@ func (r *Rabbit)respond(event Event)error{
 			DeliveryMode: amqp.Persistent,
 			ContentType:   "application/json",
 			CorrelationId: event.Message.CorrelationId,
-			Body:          responseJson,
+			Body:          event.response,
 			Headers: headers,
 		})
 	return err
