@@ -98,7 +98,7 @@ func (r *Rabbit)Listen(){
 		for message := range msgs {
 			fmt.Println("Got event "+ message.RoutingKey)
 			event := Event{
-				message:message,
+				Message:message,
 			}
 			r.handlers[message.RoutingKey].handlerFunction(&event)
 
@@ -216,13 +216,13 @@ func (r *Rabbit)respond(event Event)error{
 	headers["error"] = event.isError
 	err := r.channel.Publish(
 		"",        // exchange
-		event.message.ReplyTo, // routing key
+		event.Message.ReplyTo, // routing key
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
 			DeliveryMode: amqp.Persistent,
 			ContentType:   "application/json",
-			CorrelationId: event.message.CorrelationId,
+			CorrelationId: event.Message.CorrelationId,
 			Body:          responseJson,
 			Headers: headers,
 		})
