@@ -143,22 +143,20 @@ func(eve *Event)GetResponse(response interface{})[]byte{
 	return eve.response
 }
 
-func (r *Rabbit)Send(routingKey string, messageBody interface{})error{
-	responseJson, err := json.Marshal(messageBody)
-	if err != nil{
-		panic(err.Error())
-	}
-	err = r.channel.Publish(
-		"",        // exchange
+func (r *Rabbit)Send(routingKey string, messageBody []byte){
+	err := r.channel.Publish(
+		r.exchangeName, // exchange
 		routingKey, // routing key
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
 			DeliveryMode: amqp.Persistent,
 			ContentType:   "application/json",
-			Body:          responseJson,
+			Body:          messageBody,
 		})
-	return err
+	if err != nil{
+		panic(err.Error())
+	}
 }
 
 func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
@@ -176,7 +174,7 @@ func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
 	corrId := randomString(32)
 
 	err = r.channel.Publish(
-		"main",          // exchange
+		r.exchangeName,          // exchange
 		routingKey, // routing key
 		false,       // mandatory
 		false,       // immediate
