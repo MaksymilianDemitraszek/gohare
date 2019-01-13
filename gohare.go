@@ -160,8 +160,17 @@ func (r *Rabbit)Send(routingKey string, messageBody []byte){
 }
 
 func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
+	q, err := r.channel.QueueDeclare(
+		"",    // name
+		false, // durable
+		false, // delete when usused
+		true,  // exclusive
+		false, // noWait
+		nil,   // arguments
+	)
+
 	msgs, err := r.channel.Consume(
-		r.queue.Name, // queue
+		q.Name, // queue
 		"",     // consumer
 		true,   // auto-ack
 		false,  // exclusive
@@ -181,7 +190,7 @@ func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: corrId,
-			ReplyTo:       r.queue.Name,
+			ReplyTo:       q.Name,
 			Body: messageBody,
 
 		})
