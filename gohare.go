@@ -2,6 +2,7 @@ package gohare
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/streadway/amqp"
 	"log"
@@ -159,9 +160,22 @@ func (r *Rabbit)Send(routingKey string, messageBody []byte){
 	}
 }
 
-func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
+func(r *Rabbit) declareExclusiveQueue()*amqp.Queue{
+	q, err := r.channel.QueueDeclare(
+		"",    // name
+		false, // durable
+		false, // delete when usused
+		true,  // exclusive
+		false, // noWait
+		nil,   // arguments
+	)
+	failOnError(err, "Failed to register a consumer")
+	return &q
+}
+
+func (r *Rabbit) loadResponseListener(queue *amqp.Queue) <-chan amqp.Delivery {
 	msgs, err := r.channel.Consume(
-		r.queue.Name, // queue
+		queue.Name, // queue
 		"",     // consumer
 		true,   // auto-ack
 		false,  // exclusive
@@ -170,35 +184,78 @@ func (r *Rabbit)Request(routingKey string, messageBody []byte)([]byte, bool){
 		nil,    // args
 	)
 	failOnError(err, "Failed to register a consumer")
+	return msgs
+}
 
-	corrId := randomString(32)
+type RequestForm struct{
+	RoutingKey string
+	MessageBody []byte
+	CorrelationId string
+	Response []byte
+	IsResponseError bool
+}
 
-	err = r.channel.Publish(
-		r.exchangeName,          // exchange
-		routingKey, // routing key
-		false,       // mandatory
-		false,       // immediate
-		amqp.Publishing{
-			ContentType:   "application/json",
-			CorrelationId: corrId,
-			ReplyTo:       r.queue.Name,
-			Body: messageBody,
+func NewRequest(routingKey string, messageBody []byte) *RequestForm{
+	rq := RequestForm{}
+	rq.RoutingKey = routingKey
+	rq.MessageBody = messageBody
+	return &rq
+}
 
-		})
-	failOnError(err, "Failed to publish a message")
+func (r *Rabbit)Request(requests []*RequestForm){
+	queue := r.declareExclusiveQueue()
+	msgs := r.loadResponseListener(queue)
 
+
+	for i:=0; i<len(requests); i++ {
+		requests[i].CorrelationId = randomString(32)
+
+		err := r.channel.Publish(
+			r.exchangeName,          // exchange
+			requests[i].RoutingKey, // routing key
+			false,       // mandatory
+			false,       // immediate
+			amqp.Publishing{
+				ContentType:   "application/json",
+				CorrelationId: requests[i].CorrelationId,
+				ReplyTo:       queue.Name,
+				Body: requests[i].MessageBody,
+
+			})
+		failOnError(err, "Failed to publish a message")
+
+	}
+
+
+	requestsCount := 0
 	for d := range msgs {
-		if corrId == d.CorrelationId {
+		rq, err := findRequest(d.CorrelationId, requests)
+		if err == nil {
 			if val, ok := d.Headers["error"]; ok {
 				if val, ok := val.(bool); ok {
-					return d.Body, val
+					rq.Response = d.Body
+					rq.IsResponseError = val
 				}
-
+			}else{
+				rq.Response = []byte("Service error")
+				rq.IsResponseError = true
 			}
-			return []byte("Service error"), true
+
+		}
+		requestsCount++
+		if requestsCount == len(requests){
+			return
 		}
 	}
-	return []byte("Service error"), true
+}
+
+func findRequest(corrId string, requests []*RequestForm) (*RequestForm, error){
+	for i:=0; i<len(requests); i++ {
+		if requests[i].CorrelationId == corrId{
+			return requests[i], nil
+		}
+	}
+	return &RequestForm{}, errors.New(("Request does't exist"))
 }
 
 func randomString(l int) string {
