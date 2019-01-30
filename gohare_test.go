@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"gitlab.com/MaksymilianDemitraszek/beaconpaymentbackend/APIGateway/utils"
 	"testing"
 	"time"
 )
@@ -57,7 +56,7 @@ func init(){
 func TestNoRpc(t *testing.T){
 
 
-	requestBody := utils.StructToJson(&mockMessage{
+	requestBody := StructToJson(&mockMessage{
 		Message: "message",
 	})
 
@@ -66,7 +65,7 @@ func TestNoRpc(t *testing.T){
 
 func TestRpc(t *testing.T){
 
-	requestBody := utils.StructToJson(&mockMessage{
+	requestBody := StructToJson(&mockMessage{
 		Message: "message",
 	})
 	req := []*RequestForm{
@@ -85,10 +84,10 @@ func TestRpc(t *testing.T){
 
 
 func TestMultipleRpc(t *testing.T){
-	requestBody := utils.StructToJson(&mockMessage{
+	requestBody := StructToJson(&mockMessage{
 		Message: "message",
 	})
-	requestBody2 := utils.StructToJson(&mockMessage{
+	requestBody2 := StructToJson(&mockMessage{
 		Message: "slowerMessage",
 	})
 
@@ -102,7 +101,7 @@ func TestMultipleRpc(t *testing.T){
 
 	resp := mockMessage{}
 	for i:=0; i<len(req); i++ {
-		err := json.Unmarshal(req[i].MessageBody, &resp)
+		err := json.Unmarshal(req[i].Response, &resp)
 		assert.Nil(t, err, "Response parsing error")
 
 		switch req[i].RoutingKey {
@@ -120,3 +119,10 @@ type mockMessage struct {
 }
 
 
+func StructToJson(request interface{})[]byte{
+	reqBody, err := json.Marshal(request)
+	if err != nil{
+		fmt.Println(err.Error())
+	}
+	return reqBody
+}

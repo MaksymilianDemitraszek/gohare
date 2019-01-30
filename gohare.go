@@ -224,9 +224,7 @@ func (r *Rabbit)Request(requests []*RequestForm){
 
 			})
 		failOnError(err, "Failed to publish a message")
-
 	}
-
 
 	requestsCount := 0
 	for d := range msgs {
