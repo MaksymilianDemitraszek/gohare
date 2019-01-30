@@ -160,6 +160,7 @@ func (r *Rabbit)Send(routingKey string, messageBody []byte){
 	}
 }
 
+
 func(r *Rabbit) declareExclusiveQueue()*amqp.Queue{
 	q, err := r.channel.QueueDeclare(
 		"",    // name
@@ -195,6 +196,7 @@ type RequestForm struct{
 	IsResponseError bool
 }
 
+
 func NewRequest(routingKey string, messageBody []byte) *RequestForm{
 	rq := RequestForm{}
 	rq.RoutingKey = routingKey
@@ -205,7 +207,6 @@ func NewRequest(routingKey string, messageBody []byte) *RequestForm{
 func (r *Rabbit)Request(requests []*RequestForm){
 	queue := r.declareExclusiveQueue()
 	msgs := r.loadResponseListener(queue)
-
 
 	for i:=0; i<len(requests); i++ {
 		requests[i].CorrelationId = randomString(32)
@@ -301,11 +302,7 @@ func connectAmpq(url string) *amqp.Connection{
 	return conn
 }
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Fatalf("%s: %s", msg, err)
-	}
-}
+
 
 func JsonToStruct(rawResponse []byte ,jsonResponse interface{}){
 	if err := json.Unmarshal(rawResponse, &jsonResponse); err != nil{
@@ -322,4 +319,10 @@ func MakeErrorResponse(message string)(ErrorForm, bool){
 		ErrorMessage:message,
 	}
 	return errorForm, true
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %s", msg, err)
+	}
 }
