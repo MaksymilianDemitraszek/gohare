@@ -99,6 +99,7 @@ func (r *Rabbit)Listen(){
 		for message := range msgs {
 			fmt.Println("Got event "+ message.RoutingKey)
 			event := Event{
+				hare: r,
 				Message:message,
 			}
 			r.handlers[message.RoutingKey].handlerFunction(&event)
@@ -115,6 +116,7 @@ func (r *Rabbit)Listen(){
 }
 
 type Event struct{
+	hare *Rabbit
 	Message amqp.Delivery
 	response []byte
 	isResponseMade bool
@@ -142,6 +144,9 @@ func(eve *Event)MakeResponse(response interface{}){
 
 func(eve *Event)GetResponse(response interface{})[]byte{
 	return eve.response
+}
+func (r *Rabbit) Publish (routingKey string, messageBody []byte){
+	go r.Send(routingKey, messageBody)
 }
 
 func (r *Rabbit)Send(routingKey string, messageBody []byte){

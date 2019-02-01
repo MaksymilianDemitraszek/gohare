@@ -60,7 +60,7 @@ func TestNoRpc(t *testing.T){
 		Message: "message",
 	})
 
-	RabClient.Send("testNoRpc", requestBody)
+	RabClient.Publish("testNoRpc", requestBody)
 }
 
 func TestRpc(t *testing.T){
