@@ -81,6 +81,7 @@ func (r *Rabbit)Subscribe(routingKey string, handler func(event *Event), rpc boo
 	}
 }
 
+// Main listening function
 func (r *Rabbit)Listen(){
 	msgs, err := r.channel.Consume(
 		r.queue.Name, // queue
@@ -98,16 +99,7 @@ func (r *Rabbit)Listen(){
 	go func() {
 		for message := range msgs {
 			fmt.Println("Got event "+ message.RoutingKey)
-			event := Event{
-				hare: r,
-				Message:message,
-			}
-			r.handlers[message.RoutingKey].handlerFunction(&event)
-
-			if r.handlers[message.RoutingKey].rpc{
-				err = r.respond(event)
-			}
-
+			go r.handleMessage(&message)
 			message.Ack(false)
 		}
 	}()
@@ -115,12 +107,52 @@ func (r *Rabbit)Listen(){
 	<-forever
 }
 
+func (r *Rabbit)handleMessage(message *amqp.Delivery){
+	event := Event{
+		hare: r,
+		Message: message,
+	}
+	r.handlers[message.RoutingKey].handlerFunction(&event)
+
+	if r.handlers[message.RoutingKey].rpc{
+		go r.respond(event)
+	}
+	for _, req := range event.sendQueue{
+		go r.Publish(req)
+	}
+}
+
+func (r *Rabbit)respond(event Event){
+
+	headers := make(map[string]interface{})
+	headers["error"] = event.isError
+	err := r.channel.Publish(
+		"",        // exchange
+		event.Message.ReplyTo, // routing key
+		false,     // mandatory
+		false,     // immediate
+		amqp.Publishing{
+			DeliveryMode: amqp.Persistent,
+			ContentType:   "application/json",
+			CorrelationId: event.Message.CorrelationId,
+			Body:          event.response,
+			Headers: headers,
+		})
+	failOnError(err, "responding error")
+}
+
 type Event struct{
 	hare *Rabbit
-	Message amqp.Delivery
+	Message *amqp.Delivery
 	response []byte
 	isResponseMade bool
 	isError bool
+	sendQueue []sendRequest
+}
+
+type sendRequest struct{
+	routingKey string
+	messageBody []byte
 }
 
 func(eve *Event)Error(errorMessage string){
@@ -145,24 +177,25 @@ func(eve *Event)MakeResponse(response interface{}){
 func(eve *Event)GetResponse(response interface{})[]byte{
 	return eve.response
 }
-func (r *Rabbit) Publish (routingKey string, messageBody []byte){
-	go r.Send(routingKey, messageBody)
-}
 
-func (r *Rabbit)Send(routingKey string, messageBody []byte){
+func (r *Rabbit) Publish (sendR sendRequest){
 	err := r.channel.Publish(
 		r.exchangeName, // exchange
-		routingKey, // routing key
+		sendR.routingKey, // routing key
 		false,     // mandatory
 		false,     // immediate
 		amqp.Publishing{
 			DeliveryMode: amqp.Persistent,
 			ContentType:   "application/json",
-			Body:          messageBody,
+			Body:          sendR.messageBody,
 		})
 	if err != nil{
 		panic(err.Error())
 	}
+}
+
+func (e *Event)Send(routingKey string, messageBody []byte){
+	e.sendQueue = append(e.sendQueue, sendRequest{routingKey:routingKey, messageBody:messageBody})
 }
 
 
@@ -274,24 +307,6 @@ func randInt(min int, max int) int {
 	return min + rand.Intn(max-min)
 }
 
-func (r *Rabbit)respond(event Event)error{
-
-	headers := make(map[string]interface{})
-	headers["error"] = event.isError
-	err := r.channel.Publish(
-		"",        // exchange
-		event.Message.ReplyTo, // routing key
-		false,     // mandatory
-		false,     // immediate
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent,
-			ContentType:   "application/json",
-			CorrelationId: event.Message.CorrelationId,
-			Body:          event.response,
-			Headers: headers,
-		})
-	return err
-}
 
 func connectChannel(connection *amqp.Connection) *amqp.Channel{
 	ch, err := connection.Channel()
