@@ -1,5 +1,5 @@
 # gohare
-#### Golang microservices framework. <br>
+#### Golang pub-sub framework. <br>
 Framework which allows you easliy create pub-sub microsevices infrastrucutre, using GoLang, with consistant api, and concurrent rpc requests where necessary.
 
 #### Documentation
